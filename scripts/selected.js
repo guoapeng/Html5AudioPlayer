@@ -9,61 +9,41 @@
  */
 window.onload = function() {
     new Selected().init();
-};
-var Selected = function() {
+}
+function Selected() {
     this.audio = document.getElementById('audio');
     this.lyricContainer = document.getElementById('lyricContainer');
-    this.playlist = document.getElementById('playlist');
+    this.playlist = new PlayList(document.getElementById('playlist'), this);
     this.currentIndex = 0;
     this.lyric = null;
     this.lyricStyle = 0; //random num to specify the different class name for lyric
-};
+}
 Selected.prototype = {
     constructor: Selected, //fix the prototype chain
+    getPlayList: function() {
+        return this.playlist
+    },
     init: function() {
         //get all songs and add to the playlist
-        this.initialList(this);
-
+        this.playlist.initialList('./scripts/content.json');
         var that = this,
-            allSongs = this.playlist.children[0].children,
             currentSong, randomSong;
-
         //get the hash from the url if there's any.
         var songName = window.location.hash.substr(1);
         //then get the index of the song from all songs
-        var indexOfHashSong = (function() {
-            var index = 0;
-            Array.prototype.forEach.call(allSongs, function(v, i, a) {
-                if (v.children[0].getAttribute('data-name') == songName) {
-                    index = i;
-                    return false;
-                }
-            });
-            return index;
-        })();
+        var indexOfHashSong = this.playlist.getSongIndex(songName);
 
-        this.currentIndex = indexOfHashSong || Math.floor(Math.random() * allSongs.length);
+        this.currentIndex = indexOfHashSong || Math.floor(Math.random() * that.playlist.getAllSongs().length);
 
-        currentSong = allSongs[this.currentIndex];
+        currentSong = that.playlist.getAllSongs()[this.currentIndex];
         randomSong = currentSong.children[0].getAttribute('data-name');
 
         //set the song name to the hash of the url
         window.location.hash = window.location.hash || randomSong;
 
-
         //handle playlist
-        this.playlist.addEventListener('click', function(e) {
-            if (e.target.nodeName.toLowerCase() !== 'a') {
-                return;
-            };
-            var allSongs = that.playlist.children[0].children,
-                selectedIndex = Array.prototype.indexOf.call(allSongs, e.target.parentNode);
-            that.currentIndex = selectedIndex;
-            that.setClass(selectedIndex);
-            var songName = e.target.getAttribute('data-name');
-            window.location.hash = songName;
-            that.play(songName);
-        }, false);
+        this.playlist.handleClickEvent();
+
         this.audio.onended = function() {
             that.playNext(that);
         }
@@ -90,35 +70,11 @@ Selected.prototype = {
             document.getElementsByTagName('html')[0].className = 'imageBg';
         });
         //initially start from a random song
-        for (var i = allSongs.length - 1; i >= 0; i--) {
-            allSongs[i].className = '';
+        for (var i = that.playlist.getAllSongs().length - 1; i >= 0; i--) {
+            that.playlist.getAllSongs()[i].className = '';
         };
         currentSong.className = 'current-song';
         this.play(randomSong);
-    },
-    initialList: function(ctx) {
-        var xhttp = new XMLHttpRequest();
-        xhttp.open('GET', './scripts/content.json', false);
-        xhttp.onreadystatechange = function() {
-            if (xhttp.status == 200 && xhttp.readyState == 4) {
-                var fragment = document.createDocumentFragment(),
-                    data = JSON.parse(xhttp.responseText).data,
-                    ol = ctx.playlist.getElementsByTagName('ol')[0],
-                    fragment = document.createDocumentFragment();
-
-                data.forEach(function(v, i, a) {
-                    var li = document.createElement('li'),
-                        a = document.createElement('a');
-                    a.href = 'javascript:void(0)';
-                    a.dataset.name = v.lrc_name;
-                    a.textContent = v.song_name + '-' + v.artist;
-                    li.appendChild(a);
-                    fragment.appendChild(li);
-                });
-                ol.appendChild(fragment);
-            }
-        };
-        xhttp.send();
     },
     play: function(songName) {
         var that = this;
@@ -152,7 +108,7 @@ Selected.prototype = {
         });
     },
     playNext: function(that) {
-        var allSongs = this.playlist.children[0].children,
+        var allSongs = this.playlist.getContainer().children[0].children,
             nextItem;
         //reaches the last song of the playlist?
         if (that.currentIndex === allSongs.length - 1) {
@@ -169,7 +125,7 @@ Selected.prototype = {
         that.play(songName);
     },
     setClass: function(index) {
-        var allSongs = this.playlist.children[0].children;
+        var allSongs = this.playlist.getContainer().children[0].children;
         for (var i = allSongs.length - 1; i >= 0; i--) {
             allSongs[i].className = '';
         };
@@ -259,3 +215,75 @@ Selected.prototype = {
         return offset;
     }
 };
+
+function PlayList(playListContainer, player){
+    this.container = playListContainer;
+    this.player = player
+}
+
+PlayList.prototype = {
+    getContainer:function(){
+        return this.container;
+    },
+    getAllSongs: function() {
+        return this.container.children[0].children;
+    },
+    initialList: function(contentUrl) {
+        var xhttp = new XMLHttpRequest();
+        xhttp.open('GET', contentUrl, false);
+        xhttp.onreadystatechange = function() {
+            if (xhttp.status == 200 && xhttp.readyState == 4) {
+                var data = JSON.parse(xhttp.responseText).data
+                refreshPlayList(this.container, data)
+            }
+        };
+        xhttp.send();
+    },
+    handleClickEvent: function(){
+        //handle playlist
+        var playList  = this
+        this.getContainer().addEventListener('click', function(e) {
+            if (e.target.nodeName.toLowerCase() !== 'a') {
+                return;
+            };
+            var allSongs = playList.getAllSongs(),
+                selectedIndex = Array.prototype.indexOf.call(allSongs, e.target.parentNode);
+            playList.player.currentIndex = selectedIndex;
+            playList.player.setClass(selectedIndex);
+            var songName = e.target.getAttribute('data-name');
+            window.location.hash = songName;
+            playList.player.play(songName);
+        }, false);
+    },
+    getSongIndex: function(songName) {
+        var index = 0;
+        Array.prototype.forEach.call(this.getAllSongs(), function(v, i, a) {
+            if (v.children[0].getAttribute('data-name') == songName) {
+                index = i;
+                return false;
+            }
+        });
+        return index;
+    }
+}
+
+function refreshPlayList(playList, data) {
+    var ol = playlist.getElementsByTagName('ol')[0],
+        fragment = document.createDocumentFragment();
+
+    data.forEach(function(v) {
+        fragment.appendChild(createPlayListItem(v));
+    });
+    ol.appendChild(fragment);
+}
+
+function createPlayListItem(audioDetail){
+    var li = document.createElement('li'),
+        a = document.createElement('a');
+    a.href = 'javascript:void(0)';
+    a.dataset.name = audioDetail.lrc_name;
+    a.textContent = audioDetail.song_name + '-' + audioDetail.artist;
+    li.appendChild(a);
+    return li
+}
+
