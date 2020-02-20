@@ -23,35 +23,20 @@ Selected.prototype = {
     getLyricContainer: function(){
         return this.audioPlayer.getLyricContainer()
     },
-    getLyricText: function(){
-        return this.audioPlayer.lyric
-    },
-    setLyricText: function(lyric){
-        this.audioPlayer.lyric =  lyric
-    },
-    getCurrentIndex: function(){
-        return this.playlist.currentIndex;
-    },
-    setCurrentIndex: function(index){
-        this.playlist.currentIndex = index
-    },
+
     init: function() {
         //get all songs and add to the playlist
-        this.playlist.initialList('./scripts/content.json');
-        var that = this,
-            currentSong, randomSong;
+        this.playlist.init('./scripts/content.json');
+        var that = this;
         //get the hash from the url if there's any.
         var songName = window.location.hash.substr(1);
         //then get the index of the song from all songs
         var indexOfHashSong = this.playlist.getSongIndex(songName);
 
-        this.setCurrentIndex(indexOfHashSong || Math.floor(Math.random() * that.playlist.getAllSongs().length));
-
-        currentSong = that.playlist.getAllSongs()[this.getCurrentIndex()];
-        randomSong = currentSong.children[0].getAttribute('data-name');
+        this.playlist.setCurrentIndex(indexOfHashSong || Math.floor(Math.random() * that.playlist.getAllSongs().length));
 
         //set the song name to the hash of the url
-        window.location.hash = window.location.hash || randomSong;
+        window.location.hash = window.location.hash || that.playlist.getCurrentSong().children[0].getAttribute('data-name');
 
         //handle playlist
         this.playlist.handleClickEvent();
@@ -59,6 +44,7 @@ Selected.prototype = {
         this.getAudio().onended = function() {
             that.playNext(that);
         }
+
         this.getAudio().onerror = function(e) {
             that.getLyricContainer().textContent = '!fail to load the song :(';
         };
@@ -85,9 +71,9 @@ Selected.prototype = {
         for (var i = that.playlist.getAllSongs().length - 1; i >= 0; i--) {
             that.playlist.getAllSongs()[i].className = '';
         };
-        currentSong.className = 'current-song';
-        console.info("playing song:"+randomSong)
-        this.play(randomSong);
+        that.playlist.getCurrentSong().className = 'current-song';
+
+        //this.play(randomSong);
     },
     play: function(songName) {
         var that = this;
@@ -95,18 +81,18 @@ Selected.prototype = {
         //reset the position of the lyric container
         this.getLyricContainer().style.top = '130px';
         //empty the lyric
-        this.setLyricText(null)
+        this.audioPlayer.setLyricText(null)
         this.getLyricContainer().textContent = 'loading...';
         this.lyricStyle = Math.floor(Math.random() * 4);
         this.getAudio().addEventListener('canplay', function() {
-            that.getLyric('./content/songs/' + songName + '.lrc');
+            that.audioPlayer.loadLyric('./content/songs/' + songName + '.lrc');
             that.getAudio().play();
         });
         //sync the lyric
         this.getAudio().addEventListener("timeupdate", function(e) {
-            if (!that.getLyricText()) return;
-            for (var i = 0, l = that.getLyricText().length; i < l; i++) {
-                if (this.currentTime > that.getLyricText()[i][0] - 0.50 /*preload the lyric by 0.50s*/ ) {
+            if (!that.audioPlayer.getLyricText()) return;
+            for (var i = 0, l = that.audioPlayer.getLyricText().length; i < l; i++) {
+                if (this.currentTime > that.audioPlayer.getLyricText()[i][0] - 0.50 /*preload the lyric by 0.50s*/ ) {
                     //single line display mode
                     // that.lyricContainer.textContent = that.lyric[i][1];
                     //scroll mode
@@ -121,43 +107,54 @@ Selected.prototype = {
         });
     },
     playNext: function(that) {
-        var allSongs = this.playlist.getContainer().children[0].children,
-            nextItem;
-        //reaches the last song of the playlist?
-        if (that.getCurrentIndex() === allSongs.length - 1) {
-            //play from start
-            that.setCurrentIndex(0)
-        } else {
-            //play next index
-            that.setCurrentIndex(that.getCurrentIndex()+1);
-        };
-        nextItem = allSongs[that.getCurrentIndex()].children[0];
-        that.setClass(that.getCurrentIndex());
-        var songName = nextItem.getAttribute('data-name');
+        this.playlist.moveToNext();
+        this.playlist.setClass();
+        var songName = this.playlist.getCurrentSong().children[0].getAttribute('data-name');
         window.location.hash = songName;
         that.play(songName);
     },
     setClass: function(index) {
-        var allSongs = this.playlist.getContainer().children[0].children;
+        var allSongs = this.playlist.getAllSongs();
         for (var i = allSongs.length - 1; i >= 0; i--) {
-            allSongs[i].className = '';
+            if(allSongs[i].className) allSongs[i].className = '';
         };
         allSongs[index].className = 'current-song';
+    }
+};
+
+function AudioPlayer(audioContainer, lyricContainer) {
+    this.audioContainer = audioContainer
+    this.lyricContainer = lyricContainer
+    this.lyric = null;
+}
+
+AudioPlayer.prototype = {
+    getAudioContainer: function () {
+        return this.audioContainer
     },
-    getLyric: function(url) {
-        var that = this,
+    getLyricContainer: function () {
+        return this.lyricContainer
+    },
+    getLyricText: function(){
+        return this.lyric
+    },
+    setLyricText: function(lyric){
+        this.lyric =  lyric
+    },
+    loadLyric: function(url) {
+        var audioPlayer = this,
             request = new XMLHttpRequest();
         request.open('GET', url, true);
         request.responseType = 'text';
         //fix for the messy code problem for Chinese.  reference: http://xx.time8.org/php/20101218/ajax-xmlhttprequest.html
         //request['overrideMimeType'] && request.overrideMimeType("text/html;charset=gb2312");
         request.onload = function() {
-            that.setLyricText(that.parseLyric(request.response));
+            audioPlayer.setLyricText(audioPlayer.parseLyric(request.response));
             //display lyric to the page
-            that.appendLyric(that.getLyricText());
+            audioPlayer.appendLyric(audioPlayer.getLyricText());
         };
         request.onerror = request.onabort = function(e) {
-            that.getLyricContainer().textContent = '!failed to load the lyric :(';
+            audioPlayer.getLyricContainer().textContent = '!failed to load the lyric :(';
         }
         this.getLyricContainer().textContent = 'loading lyric...';
         request.send();
@@ -182,7 +179,7 @@ Selected.prototype = {
         lines.forEach(function(v, i, a) {
             var time = v.match(pattern),
                 value = v.replace(pattern, '');
-            time.forEach(function(v1, i1, a1) {
+            time.forEach(function(v1) {
                 //convert the [min:sec] to secs format then store into result
                 var t = v1.slice(1, -1).split(':');
                 result.push([parseInt(t[0], 10) * 60 + parseFloat(t[1]) + parseInt(offset) / 1000, value]);
@@ -195,12 +192,11 @@ Selected.prototype = {
         return result;
     },
     appendLyric: function(lyric) {
-        var that = this,
-            lyricContainer = this.getLyricContainer(),
+        var lyricContainer = this.getLyricContainer(),
             fragment = document.createDocumentFragment();
         //clear the lyric container first
         lyricContainer.innerHTML = '';
-        lyric.forEach(function(v, i, a) {
+        lyric.forEach(function(v, i) {
             var line = document.createElement('p');
             line.id = 'line-' + i;
             line.textContent = v[1];
@@ -221,24 +217,9 @@ Selected.prototype = {
             // Convert it to Int.
             offset = parseInt(offset_str);
         } catch (err) {
-            //alert("offset error: "+err.message);
             offset = 0;
         }
         return offset;
-    }
-};
-
-function AudioPlayer(audioContainer, lyricContainer) {
-    this.audioContainer = audioContainer
-    this.lyricContainer = lyricContainer
-    this.lyric = null;
-}
-AudioPlayer.prototype = {
-    getAudioContainer: function () {
-        return this.audioContainer
-    },
-    getLyricContainer: function () {
-        return this.lyricContainer
     }
 }
 
@@ -250,13 +231,36 @@ function PlayList(playListContainer, player){
 }
 
 PlayList.prototype = {
+    setCurrentIndex: function(index){
+        this.currentIndex = index
+    },
     getContainer:function(){
         return this.container;
     },
     getAllSongs: function() {
         return this.container.children[0].children;
     },
-    initialList: function(contentUrl) {
+    getCurrentSong: function() {
+        this.getAllSongs()[this.currentIndex];
+    },
+    setClass: function() {
+        var allSongs = this.getAllSongs()
+        for (var i = allSongs.length - 1; i >= 0; i--) {
+            if(allSongs[i].className) allSongs[i].className = '';
+        };
+        this.getCurrentSong().className = 'current-song';
+    },
+    moveToNext: function(){
+        //reaches the last song of the playlist?
+        if (this.currentIndex === this.getAllSongs().length - 1) {
+            //play from start
+            this.currentIndex = 0
+        } else {
+            //play next index
+            this.currentIndex = this.currentIndex + 1
+        };
+    },
+    init: function(contentUrl) {
         var playList = this
         var xhttp = new XMLHttpRequest();
         xhttp.open('GET', contentUrl, false);
@@ -295,7 +299,7 @@ PlayList.prototype = {
             };
             var allSongs = playList.getAllSongs(),
                 selectedIndex = Array.prototype.indexOf.call(allSongs, e.target.parentNode);
-            playList.player.setCurrentIndex(selectedIndex);
+            playList.setCurrentIndex(selectedIndex);
             playList.player.setClass(selectedIndex);
             var songName = e.target.getAttribute('data-name');
             window.location.hash = songName;
