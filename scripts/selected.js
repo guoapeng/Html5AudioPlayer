@@ -16,38 +16,21 @@ function Selected() {
     this.lyricStyle = 0; //random num to specify the different class name for lyric
 }
 Selected.prototype = {
-    constructor: Selected, //fix the prototype chain
     getAudio: function() {
         return this.audioPlayer.getAudioContainer()
     },
     getLyricContainer: function(){
         return this.audioPlayer.getLyricContainer()
     },
-
     init: function() {
+
+        var that = this;
         //get all songs and add to the playlist
         this.playlist.init('./scripts/content.json');
-        var that = this;
-        //get the hash from the url if there's any.
-        var songName = window.location.hash.substr(1);
-        //then get the index of the song from all songs
-        var indexOfHashSong = this.playlist.getSongIndex(songName);
-
-        this.playlist.setCurrentIndex(indexOfHashSong || Math.floor(Math.random() * that.playlist.getAllSongs().length));
-
-        //set the song name to the hash of the url
-        window.location.hash = window.location.hash || that.playlist.getCurrentSong().children[0].getAttribute('data-name');
-
-        //handle playlist
-        this.playlist.handleClickEvent();
-
-        this.getAudio().onended = function() {
+        this.audioPlayer.init();
+        window.addEventListener("playnext", function(){
             that.playNext(that);
-        }
-
-        this.getAudio().onerror = function(e) {
-            that.getLyricContainer().textContent = '!fail to load the song :(';
-        };
+        })
 
         //enable keyboard control , spacebar to play and pause
         window.addEventListener('keydown', function(e) {
@@ -67,27 +50,13 @@ Selected.prototype = {
         document.getElementById('bg_pic').addEventListener('click', function() {
             document.getElementsByTagName('html')[0].className = 'imageBg';
         });
-        //initially start from a random song
-        for (var i = that.playlist.getAllSongs().length - 1; i >= 0; i--) {
-            that.playlist.getAllSongs()[i].className = '';
-        };
-        that.playlist.getCurrentSong().className = 'current-song';
 
-        //this.play(randomSong);
     },
     play: function(songName) {
         var that = this;
-        this.getAudio().src = './content/songs/' + songName + '.mp3';
-        //reset the position of the lyric container
-        this.getLyricContainer().style.top = '130px';
-        //empty the lyric
-        this.audioPlayer.setLyricText(null)
-        this.getLyricContainer().textContent = 'loading...';
+        this.audioPlayer.reset()
         this.lyricStyle = Math.floor(Math.random() * 4);
-        this.getAudio().addEventListener('canplay', function() {
-            that.audioPlayer.loadLyric('./content/songs/' + songName + '.lrc');
-            that.getAudio().play();
-        });
+        this.audioPlayer.play('./content/songs/' + songName + '.mp3', './content/songs/' + songName + '.lrc')
         //sync the lyric
         this.getAudio().addEventListener("timeupdate", function(e) {
             if (!that.audioPlayer.getLyricText()) return;
@@ -112,13 +81,6 @@ Selected.prototype = {
         var songName = this.playlist.getCurrentSong().children[0].getAttribute('data-name');
         window.location.hash = songName;
         that.play(songName);
-    },
-    setClass: function(index) {
-        var allSongs = this.playlist.getAllSongs();
-        for (var i = allSongs.length - 1; i >= 0; i--) {
-            if(allSongs[i].className) allSongs[i].className = '';
-        };
-        allSongs[index].className = 'current-song';
     }
 };
 
@@ -129,6 +91,22 @@ function AudioPlayer(audioContainer, lyricContainer) {
 }
 
 AudioPlayer.prototype = {
+    init: function(){
+        this.audioContainer.onended = function() {
+            window.dispatchEvent(new Event("playnext"))
+        }
+        this.audioContainer.onerror = function(e) {
+            this.lyricContainer.textContent = '!fail to load the song :(';
+        };
+
+    },
+    reset: function(){
+        //reset the position of the lyric container
+        this.lyricContainer.style.top = '130px';
+        this.lyricContainer.textContent = 'loading...';
+        //empty the lyric
+        this.setLyricText(null)
+    },
     getAudioContainer: function () {
         return this.audioContainer
     },
@@ -140,6 +118,21 @@ AudioPlayer.prototype = {
     },
     setLyricText: function(lyric){
         this.lyric =  lyric
+    },
+    addEventListener: function(event){
+        var audioPlayer = this
+        this.getAudioContainer().addEventListener(event.eventName, function() {
+            audioPlayer.loadLyric('./content/songs/' + event.songName + '.lrc');
+            this.play();
+        });
+    },
+    play: function(mediaUrl, lyricUrl) {
+        var audioPlayer = this
+        this.getAudioContainer().addEventListener('canplay', function() {
+            audioPlayer.loadLyric(lyricUrl);
+            this.play();
+        });
+        this.getAudioContainer().src = mediaUrl
     },
     loadLyric: function(url) {
         var audioPlayer = this,
@@ -223,7 +216,6 @@ AudioPlayer.prototype = {
     }
 }
 
-
 function PlayList(playListContainer, player){
     this.container = playListContainer;
     this.player = player
@@ -241,7 +233,7 @@ PlayList.prototype = {
         return this.container.children[0].children;
     },
     getCurrentSong: function() {
-        this.getAllSongs()[this.currentIndex];
+       return this.getAllSongs()[this.currentIndex];
     },
     setClass: function() {
         var allSongs = this.getAllSongs()
@@ -262,15 +254,34 @@ PlayList.prototype = {
     },
     init: function(contentUrl) {
         var playList = this
+        window.addEventListener("playlistReady", function(){
+            playList.autoPlay();
+        });
         var xhttp = new XMLHttpRequest();
         xhttp.open('GET', contentUrl, false);
         xhttp.onreadystatechange = function() {
             if (xhttp.status == 200 && xhttp.readyState == 4) {
                 var data = JSON.parse(xhttp.responseText).data
                 playList.refreshPlayList(data)
+                window.dispatchEvent(new Event("playlistReady"))
             }
         };
         xhttp.send();
+        this.handleClickEvent();
+    },
+    autoPlay: function() {
+
+        //get the hash from the url if there's any.
+        var songName = window.location.hash.substr(1);
+        //then get the index of the song from all songs
+        var indexOfHashSong = this.getSongIndex(songName);
+
+        this.setCurrentIndex(indexOfHashSong || Math.floor(Math.random() * this.getAllSongs().length));
+
+        //set the song name to the hash of the url
+        window.location.hash = window.location.hash || this.getCurrentSong().children[0].getAttribute('data-name');
+        this.setClass()
+        this.player.play(this.getCurrentSong().children[0].getAttribute('data-name'));
     },
     refreshPlayList: function(data) {
         var playList = this,
@@ -300,7 +311,7 @@ PlayList.prototype = {
             var allSongs = playList.getAllSongs(),
                 selectedIndex = Array.prototype.indexOf.call(allSongs, e.target.parentNode);
             playList.setCurrentIndex(selectedIndex);
-            playList.player.setClass(selectedIndex);
+            playList.setClass();
             var songName = e.target.getAttribute('data-name');
             window.location.hash = songName;
             playList.player.play(songName);
