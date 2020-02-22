@@ -6,32 +6,31 @@
  * view on GitHub:https://github.com/wayou/selected
  * see the live site:http://wayou.github.io/selected/
  * songs used in this project are only for educational purpose
+ * Changelog:
+ * By guoapeng from Feb 20th, 2020
+ * deeply refactor initializing process
+ * decoupled AudioPlayer and PlayList with clear responsibility by applying event-driven model
+ * refer to the branch refactore on https://github.com/guoapeng/Html5AudioPlayer.git for details
  */
 window.onload = function() {
     new Selected().init();
 }
+
 function Selected() {
-    this.audioPlayer = new AudioPlayer(document.getElementById('audio'), document.getElementById('lyricContainer'))
-    this.playlist = new PlayList(document.getElementById('playlist'), this);
-    this.lyricStyle = 0; //random num to specify the different class name for lyric
+    this.audioPlayer = new AudioPlayer(document.getElementById('audio'))
+    this.subtitleManager = new SubtitleManager(document.getElementById('lyricContainer'));
+    this.playlist = new PlayList(document.getElementById('playlist'));
 }
+
 Selected.prototype = {
     getAudio: function() {
         return this.audioPlayer.getAudioContainer()
     },
-    getLyricContainer: function(){
-        return this.audioPlayer.getLyricContainer()
-    },
     init: function() {
-
         var that = this;
-        //get all songs and add to the playlist
-        this.playlist.init('./scripts/content.json');
-        this.audioPlayer.init();
-        window.addEventListener("playnext", function(){
-            that.playNext(that);
-        })
-
+        this.audioPlayer.init(this.subtitleManager.getPlayerTimeUpdateHandler(), this.subtitleManager.getPlayerErrorHandler());
+        this.subtitleManager.init();
+        this.playlist.init('./content/index.json');
         //enable keyboard control , spacebar to play and pause
         window.addEventListener('keydown', function(e) {
             if (e.keyCode === 32) {
@@ -42,7 +41,6 @@ Selected.prototype = {
                 }
             }
         }, false);
-
         //initialize the background setting
         document.getElementById('bg_dark').addEventListener('click', function() {
             document.getElementsByTagName('html')[0].className = 'colorBg';
@@ -50,68 +48,64 @@ Selected.prototype = {
         document.getElementById('bg_pic').addEventListener('click', function() {
             document.getElementsByTagName('html')[0].className = 'imageBg';
         });
-
-    },
-    play: function(songName) {
-        var that = this;
-        this.audioPlayer.reset()
-        this.lyricStyle = Math.floor(Math.random() * 4);
-        this.audioPlayer.play('./content/songs/' + songName + '.mp3', './content/songs/' + songName + '.lrc')
-        //sync the lyric
-        this.getAudio().addEventListener("timeupdate", function(e) {
-            if (!that.audioPlayer.getLyricText()) return;
-            for (var i = 0, l = that.audioPlayer.getLyricText().length; i < l; i++) {
-                if (this.currentTime > that.audioPlayer.getLyricText()[i][0] - 0.50 /*preload the lyric by 0.50s*/ ) {
-                    //single line display mode
-                    // that.lyricContainer.textContent = that.lyric[i][1];
-                    //scroll mode
-                    var line = document.getElementById('line-' + i),
-                        prevLine = document.getElementById('line-' + (i > 0 ? i - 1 : i));
-                    prevLine.className = '';
-                    //randomize the color of the current line of the lyric
-                    line.className = 'current-line-' + that.lyricStyle;
-                    that.getLyricContainer().style.top = 130 - line.offsetTop + 'px';
-                };
-            };
-        });
-    },
-    playNext: function(that) {
-        this.playlist.moveToNext();
-        this.playlist.setClass();
-        var songName = this.playlist.getCurrentSong().children[0].getAttribute('data-name');
-        window.location.hash = songName;
-        that.play(songName);
     }
-};
+}
 
 function AudioPlayer(audioContainer, lyricContainer) {
     this.audioContainer = audioContainer
-    this.lyricContainer = lyricContainer
-    this.lyric = null;
+
 }
 
 AudioPlayer.prototype = {
-    init: function(){
+    init: function(onTimeUpdate, onPlayerError){
+        var that = this
         this.audioContainer.onended = function() {
-            window.dispatchEvent(new Event("playnext"))
-        }
-        this.audioContainer.onerror = function(e) {
-            this.lyricContainer.textContent = '!fail to load the song :(';
+            window.dispatchEvent(new Event("audioFinished"))
         };
-
-    },
-    reset: function(){
-        //reset the position of the lyric container
-        this.lyricContainer.style.top = '130px';
-        this.lyricContainer.textContent = 'loading...';
-        //empty the lyric
-        this.setLyricText(null)
+        this.audioContainer.onerror = function(e) {
+            onPlayerError(e);
+        };
+        this.audioContainer.addEventListener("timeupdate", function(e) {
+            onTimeUpdate(e, that.audioContainer.currentTime)
+        });
+        window.addEventListener("playAudio", function(e){
+            that.play('./content/songs/' + e.audioName + '.mp3');
+        });
     },
     getAudioContainer: function () {
         return this.audioContainer
     },
-    getLyricContainer: function () {
-        return this.lyricContainer
+    play: function(mediaUrl) {
+        this.getAudioContainer().addEventListener('canplay', function() {
+            this.play();
+        });
+        this.getAudioContainer().src = mediaUrl;
+    }
+}
+
+function SubtitleManager(subtitleContainer){
+    this.subtitleContainer = subtitleContainer;
+    this.lyric = null;
+    this.lyricStyle = 0;  //random num to specify the different class name for lyric
+}
+
+SubtitleManager.prototype = {
+    getSubtitleContainer: function () {
+        return this.subtitleContainer;
+    },
+    init: function(){
+        var that = this;
+        window.addEventListener("playAudio", function(e){
+            that.loadLyric( './content/songs/' + e.audioName + '.lrc');
+        });
+    },
+    reset: function () {
+        //reset the position of the lyric container
+        this.getSubtitleContainer().style.top = '130px';
+        this.getSubtitleContainer().textContent = 'loading...';
+        //empty the lyric
+        this.setLyricText(null)
+        this.lyricStyle = Math.floor(Math.random() * 4);
     },
     getLyricText: function(){
         return this.lyric
@@ -119,37 +113,61 @@ AudioPlayer.prototype = {
     setLyricText: function(lyric){
         this.lyric =  lyric
     },
-    addEventListener: function(event){
-        var audioPlayer = this
-        this.getAudioContainer().addEventListener(event.eventName, function() {
-            audioPlayer.loadLyric('./content/songs/' + event.songName + '.lrc');
-            this.play();
-        });
+    getPlayerErrorHandler: function(){
+        var that = this;
+        return function(e){
+            that.getSubtitleContainer().textContent = '!fail to load the song :(';
+        }
     },
-    play: function(mediaUrl, lyricUrl) {
-        var audioPlayer = this
-        this.getAudioContainer().addEventListener('canplay', function() {
-            audioPlayer.loadLyric(lyricUrl);
-            this.play();
+    getPlayerTimeUpdateHandler: function(){
+        var that = this;
+        return function (e, currentTime) {
+            that.synchronizeLyric(e, currentTime);
+        }
+    },
+    synchronizeLyric: function(e, currentTime) {
+        if (!this.getLyricText()) return;
+        for (var i = 0, l = this.getLyricText().length; i < l; i++) {
+            if (currentTime > this.getLyricText()[i][0] - 0.50 /*preload the lyric by 0.50s*/ ) {
+                //scroll mode
+                var line = document.getElementById('line-' + i),
+                    prevLine = document.getElementById('line-' + (i > 0 ? i - 1 : i));
+                prevLine.className = '';
+                //randomize the color of the current line of the lyric
+                line.className = 'current-line-' + this.lyricStyle;
+                this.getSubtitleContainer().style.top = 130 - line.offsetTop + 'px';
+            };
+        };
+    },
+    appendLyric: function(lyric) {
+        var lyricContainer = this.getSubtitleContainer(),
+            fragment = document.createDocumentFragment();
+        //clear the lyric container first
+        lyricContainer.innerHTML = '';
+        lyric.forEach(function(v, i) {
+            var line = document.createElement('p');
+            line.id = 'line-' + i;
+            line.textContent = v[1];
+            fragment.appendChild(line);
         });
-        this.getAudioContainer().src = mediaUrl
+        lyricContainer.appendChild(fragment);
     },
     loadLyric: function(url) {
-        var audioPlayer = this,
+        var that = this,
             request = new XMLHttpRequest();
         request.open('GET', url, true);
         request.responseType = 'text';
         //fix for the messy code problem for Chinese.  reference: http://xx.time8.org/php/20101218/ajax-xmlhttprequest.html
         //request['overrideMimeType'] && request.overrideMimeType("text/html;charset=gb2312");
         request.onload = function() {
-            audioPlayer.setLyricText(audioPlayer.parseLyric(request.response));
+            that.setLyricText(that.parseLyric(request.response));
             //display lyric to the page
-            audioPlayer.appendLyric(audioPlayer.getLyricText());
+            that.appendLyric(that.getLyricText());
         };
         request.onerror = request.onabort = function(e) {
-            audioPlayer.getLyricContainer().textContent = '!failed to load the lyric :(';
-        }
-        this.getLyricContainer().textContent = 'loading lyric...';
+            that.getSubtitleContainer().textContent = '!failed to load the lyric :(';
+        };
+        that.reset();
         request.send();
     },
     parseLyric: function(text) {
@@ -158,7 +176,6 @@ AudioPlayer.prototype = {
             //this regex mathes the time [00.12.78]
             pattern = /\[\d{2}:\d{2}.\d{2}\]/g,
             result = [];
-
         // Get offset from lyrics
         var offset = this.getOffset(text);
 
@@ -184,19 +201,6 @@ AudioPlayer.prototype = {
         });
         return result;
     },
-    appendLyric: function(lyric) {
-        var lyricContainer = this.getLyricContainer(),
-            fragment = document.createDocumentFragment();
-        //clear the lyric container first
-        lyricContainer.innerHTML = '';
-        lyric.forEach(function(v, i) {
-            var line = document.createElement('p');
-            line.id = 'line-' + i;
-            line.textContent = v[1];
-            fragment.appendChild(line);
-        });
-        lyricContainer.appendChild(fragment);
-    },
     getOffset: function(text) {
         //Returns offset in miliseconds.
         var offset = 0;
@@ -213,12 +217,11 @@ AudioPlayer.prototype = {
             offset = 0;
         }
         return offset;
-    }
+    },
 }
 
-function PlayList(playListContainer, player){
+function PlayList(playListContainer){
     this.container = playListContainer;
-    this.player = player
     this.currentIndex=0
 }
 
@@ -251,12 +254,22 @@ PlayList.prototype = {
             //play next index
             this.currentIndex = this.currentIndex + 1
         };
+        this.setClass();
+        var songName = this.getCurrentSong().children[0].getAttribute('data-name');
+        window.location.hash = songName;
+        var playAudioEvent = new Event("playAudio");
+        playAudioEvent.audioName = songName;
+        window.dispatchEvent(playAudioEvent)
     },
     init: function(contentUrl) {
         var playList = this
         window.addEventListener("playlistReady", function(){
             playList.autoPlay();
         });
+        window.addEventListener("audioFinished", function(){
+            playList.moveToNext();
+        });
+        //get all songs and add to the playlist
         var xhttp = new XMLHttpRequest();
         xhttp.open('GET', contentUrl, false);
         xhttp.onreadystatechange = function() {
@@ -270,18 +283,17 @@ PlayList.prototype = {
         this.handleClickEvent();
     },
     autoPlay: function() {
-
         //get the hash from the url if there's any.
         var songName = window.location.hash.substr(1);
         //then get the index of the song from all songs
         var indexOfHashSong = this.getSongIndex(songName);
-
         this.setCurrentIndex(indexOfHashSong || Math.floor(Math.random() * this.getAllSongs().length));
-
         //set the song name to the hash of the url
         window.location.hash = window.location.hash || this.getCurrentSong().children[0].getAttribute('data-name');
         this.setClass()
-        this.player.play(this.getCurrentSong().children[0].getAttribute('data-name'));
+        var playAudioEvent = new Event("playAudio");
+        playAudioEvent.audioName = this.getCurrentSong().children[0].getAttribute('data-name');
+        window.dispatchEvent(playAudioEvent)
     },
     refreshPlayList: function(data) {
         var playList = this,
@@ -314,7 +326,9 @@ PlayList.prototype = {
             playList.setClass();
             var songName = e.target.getAttribute('data-name');
             window.location.hash = songName;
-            playList.player.play(songName);
+            var playAudioEvent = new Event("playAudio");
+            playAudioEvent.audioName = songName;
+            window.dispatchEvent(playAudioEvent)
         }, false);
     },
     getSongIndex: function(songName) {
@@ -328,5 +342,3 @@ PlayList.prototype = {
         return index;
     }
 }
-
-
