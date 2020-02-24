@@ -12,25 +12,33 @@
  * decoupled AudioPlayer and PlayList with clear responsibility by applying event-driven model
  * refer to the branch refactore on https://github.com/guoapeng/Html5AudioPlayer.git for details
  */
-window.onload = function() {
-    new Selected().init();
-}
-
-function Selected() {
-    this.audioPlayer = new AudioPlayer(document.getElementById('audio'))
-    this.subtitleManager = new SubtitleManager(document.getElementById('lyricContainer'));
-    this.playlist = new PlayList(document.getElementById('playlist'));
+function Selected(audioId, lyricId, playlistId) {
+    this.audioPlayer = new AudioPlayer(document.getElementById(audioId))
+    this.subtitleManager = new SubtitleManager(document.getElementById(lyricId));
+    this.playlist = new PlayList(document.getElementById(playlistId));
+    this.audioControl = new AudioControl(document.getElementById(audioId))
 }
 
 Selected.prototype = {
     getAudio: function() {
         return this.audioPlayer.getAudioContainer()
     },
-    init: function() {
-        var that = this;
+    init: function(playlistUrl) {
         this.audioPlayer.init(this.subtitleManager.getPlayerTimeUpdateHandler(), this.subtitleManager.getPlayerErrorHandler());
         this.subtitleManager.init();
-        this.playlist.init('./content/index.json');
+        this.playlist.init(playlistUrl);
+        this.audioControl.init();
+    }
+}
+
+function AudioControl(audioContainer){
+    this.audioContainer = audioContainer
+}
+AudioControl.prototype = {
+    getAudio: function(){
+        return this.audioContainer;
+    },
+    init: function () {
         //enable keyboard control , spacebar to play and pause
         window.addEventListener('keydown', function(e) {
             if (e.keyCode === 32) {
@@ -41,19 +49,11 @@ Selected.prototype = {
                 }
             }
         }, false);
-        //initialize the background setting
-        document.getElementById('bg_dark').addEventListener('click', function() {
-            document.getElementsByTagName('html')[0].className = 'colorBg';
-       });
-        document.getElementById('bg_pic').addEventListener('click', function() {
-            document.getElementsByTagName('html')[0].className = 'imageBg';
-        });
     }
 }
 
-function AudioPlayer(audioContainer, lyricContainer) {
+function AudioPlayer(audioContainer) {
     this.audioContainer = audioContainer
-
 }
 
 AudioPlayer.prototype = {
@@ -69,7 +69,11 @@ AudioPlayer.prototype = {
             onTimeUpdate(e, that.audioContainer.currentTime)
         });
         window.addEventListener("playAudio", function(e){
-            that.play('./content/songs/' + e.audioName + '.mp3');
+            that.play(e.audio);
+        });
+        window.addEventListener("adjusttime", function(e){
+            that.getAudioContainer().currentTime = e.adjustToTime
+           
         });
     },
     getAudioContainer: function () {
@@ -87,6 +91,7 @@ function SubtitleManager(subtitleContainer){
     this.subtitleContainer = subtitleContainer;
     this.lyric = null;
     this.lyricStyle = 0;  //random num to specify the different class name for lyric
+    this.subtitleParser = new SubtitleParser();
 }
 
 SubtitleManager.prototype = {
@@ -96,7 +101,7 @@ SubtitleManager.prototype = {
     init: function(){
         var that = this;
         window.addEventListener("playAudio", function(e){
-            that.loadLyric( './content/songs/' + e.audioName + '.lrc');
+            that.loadLyric( e.lyric);
         });
     },
     reset: function () {
@@ -128,7 +133,7 @@ SubtitleManager.prototype = {
     synchronizeLyric: function(e, currentTime) {
         if (!this.getLyricText()) return;
         for (var i = 0, l = this.getLyricText().length; i < l; i++) {
-            if (currentTime > this.getLyricText()[i][0] - 0.50 /*preload the lyric by 0.50s*/ ) {
+            if (currentTime > this.getLyricText()[i].startTime - 0.50 /*preload the lyric by 0.50s*/ ) {
                 //scroll mode
                 var line = document.getElementById('line-' + i),
                     prevLine = document.getElementById('line-' + (i > 0 ? i - 1 : i));
@@ -147,7 +152,12 @@ SubtitleManager.prototype = {
         lyric.forEach(function(v, i) {
             var line = document.createElement('p');
             line.id = 'line-' + i;
-            line.textContent = v[1];
+            line.textContent = v.content;
+            line.onclick = function(e){
+                var adjustTimeEvent = new Event("adjusttime");
+                adjustTimeEvent.adjustToTime = v.startTime
+                window.dispatchEvent(adjustTimeEvent)
+            }
             fragment.appendChild(line);
         });
         lyricContainer.appendChild(fragment);
@@ -160,7 +170,7 @@ SubtitleManager.prototype = {
         //fix for the messy code problem for Chinese.  reference: http://xx.time8.org/php/20101218/ajax-xmlhttprequest.html
         //request['overrideMimeType'] && request.overrideMimeType("text/html;charset=gb2312");
         request.onload = function() {
-            that.setLyricText(that.parseLyric(request.response));
+            that.setLyricText(that.subtitleParser.parse(request.response));
             //display lyric to the page
             that.appendLyric(that.getLyricText());
         };
@@ -169,8 +179,15 @@ SubtitleManager.prototype = {
         };
         that.reset();
         request.send();
-    },
-    parseLyric: function(text) {
+    }
+}
+
+function SubtitleParser(){
+
+}
+
+SubtitleParser.prototype = {
+    parse:function (text) {
         //get each line from the text
         var lines = text.split('\n'),
             //this regex mathes the time [00.12.78]
@@ -192,12 +209,12 @@ SubtitleManager.prototype = {
             time.forEach(function(v1) {
                 //convert the [min:sec] to secs format then store into result
                 var t = v1.slice(1, -1).split(':');
-                result.push([parseInt(t[0], 10) * 60 + parseFloat(t[1]) + parseInt(offset) / 1000, value]);
+                result.push(new SubtitleItem(parseInt(t[0], 10) * 60 + parseFloat(t[1]) + parseInt(offset) / 1000, value));
             });
         });
         //sort the result by time
         result.sort(function(a, b) {
-            return a[0] - b[0];
+            return a.startTime - b.startTime;
         });
         return result;
     },
@@ -217,7 +234,12 @@ SubtitleManager.prototype = {
             offset = 0;
         }
         return offset;
-    },
+    }
+}
+
+function SubtitleItem(startTime, content) {
+    this.startTime = startTime
+    this.content = content
 }
 
 function PlayList(playListContainer){
@@ -254,18 +276,22 @@ PlayList.prototype = {
             //play next index
             this.currentIndex = this.currentIndex + 1
         };
+       this.play(this.getCurrentSong().children[0])
+    },
+    play: function(mediaDetail){
         this.setClass();
-        var songName = this.getCurrentSong().children[0].getAttribute('data-name');
+        var songName = mediaDetail.getAttribute('data-name');
+        var lyricUrl = mediaDetail.getAttribute('data-lyric');
+        var audioUrl = mediaDetail.getAttribute('data-audio');
         window.location.hash = songName;
         var playAudioEvent = new Event("playAudio");
         playAudioEvent.audioName = songName;
+        playAudioEvent.lyric = lyricUrl;
+        playAudioEvent.audio = audioUrl;
         window.dispatchEvent(playAudioEvent)
     },
     init: function(contentUrl) {
         var playList = this
-        window.addEventListener("playlistReady", function(){
-            playList.autoPlay();
-        });
         window.addEventListener("audioFinished", function(){
             playList.moveToNext();
         });
@@ -276,7 +302,7 @@ PlayList.prototype = {
             if (xhttp.status == 200 && xhttp.readyState == 4) {
                 var data = JSON.parse(xhttp.responseText).data
                 playList.refreshPlayList(data)
-                window.dispatchEvent(new Event("playlistReady"))
+                playList.autoPlay();
             }
         };
         xhttp.send();
@@ -290,10 +316,7 @@ PlayList.prototype = {
         this.setCurrentIndex(indexOfHashSong || Math.floor(Math.random() * this.getAllSongs().length));
         //set the song name to the hash of the url
         window.location.hash = window.location.hash || this.getCurrentSong().children[0].getAttribute('data-name');
-        this.setClass()
-        var playAudioEvent = new Event("playAudio");
-        playAudioEvent.audioName = this.getCurrentSong().children[0].getAttribute('data-name');
-        window.dispatchEvent(playAudioEvent)
+        this.play(this.getCurrentSong().children[0])
     },
     refreshPlayList: function(data) {
         var playList = this,
@@ -309,6 +332,8 @@ PlayList.prototype = {
             a = document.createElement('a');
         a.href = 'javascript:void(0)';
         a.dataset.name = audioDetail.lrc_name;
+        a.dataset.lyric = audioDetail.lyric;
+        a.dataset.audio = audioDetail.audio;
         a.textContent = audioDetail.song_name + '-' + audioDetail.artist;
         li.appendChild(a);
         return li
@@ -324,11 +349,7 @@ PlayList.prototype = {
                 selectedIndex = Array.prototype.indexOf.call(allSongs, e.target.parentNode);
             playList.setCurrentIndex(selectedIndex);
             playList.setClass();
-            var songName = e.target.getAttribute('data-name');
-            window.location.hash = songName;
-            var playAudioEvent = new Event("playAudio");
-            playAudioEvent.audioName = songName;
-            window.dispatchEvent(playAudioEvent)
+            playList.play(e.target)
         }, false);
     },
     getSongIndex: function(songName) {
