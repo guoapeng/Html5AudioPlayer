@@ -1,6 +1,6 @@
 
 window.onload = function() {
-    new Selected("audio", "lyricContainer", "playlist").init('./content/index.json');
+    new Selected("audio", "lyricContainer", "playlist").init('https://guoapeng.github.io/lyrics/content/index.json');
 }
 
 function changeBg(bgStyle) {
