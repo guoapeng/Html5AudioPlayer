@@ -27,8 +27,8 @@ window.onload = function() {
     playlist.createTitle = function(audioDetail){
         return audioDetail.song_name + '-' + audioDetail.artist;
     };
-    playlist.loadAudioList('http://localhost:9993/content/index_for_local_test.json');
-    //playlist.loadAudioList('https://guoapeng.github.com/lyrics/content/index.json');
+    //playlist.loadAudioList('http://localhost:9993/content/index_for_local_test.json');
+    playlist.loadAudioList('https://guoapeng.github.com/lyrics/content/index.json');
 }
 
 function changeBg(bgStyle) {
