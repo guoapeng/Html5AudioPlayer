@@ -63,7 +63,7 @@ PlayList.prototype = {
     play: function(audioDetail){
         this.setClass();
         //set the song name to the hash of the url
-        window.location.hash = audioDetail.lrc_name;
+        //window.location.hash = audioDetail.lrc_name;
         var playAudioEvent = new Event("playAudio");
         playAudioEvent.audioName = audioDetail.lrc_name;
         playAudioEvent.lyric = audioDetail.lyric;
@@ -106,10 +106,10 @@ PlayList.prototype = {
     },
     autoPlay: function() {
         //get the hash from the url if there's any.
-        var songName = window.location.hash.substr(1);
+        //var songName = window.location.hash.substr(1);
         //then get the index of the song from all songs
-        var indexOfHashSong = this.getSongIndex(songName);
-        this.setCurrentIndex(indexOfHashSong || Math.floor(Math.random() * this.getAllAudios().length));
+       // var indexOfHashSong = this.getSongIndex(songName);
+        this.setCurrentIndex(Math.floor(Math.random() * this.getAllAudios().length));
         this.play(this.getCurrentAudio())
     },
     getSongIndex: function(songName) {

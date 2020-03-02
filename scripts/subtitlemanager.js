@@ -121,12 +121,12 @@ SubtitleParser.prototype = {
         //display all content on the page
         lines.forEach(function (v, i, a) {
             var time = v.match(pattern),
-                value = v.replace(pattern, '');
-            time.forEach(function (v1) {
-                //convert the [min:sec] to secs format then store into result
-                var t = v1.slice(1, -1).split(':');
-                result.push(new SubtitleItem(parseInt(t[0], 10) * 60 + parseFloat(t[1]) + parseInt(offset) / 1000, value));
-            });
+                value = v.split(pattern);
+            for (i = 0, len = time.length, text = ""; i < len; i++) {
+                text = time[i]
+                var t = text.slice(1, -1).split(':');
+                result.push(new SubtitleItem(parseInt(t[0], 10) * 60 + parseFloat(t[1]) + parseInt(offset) / 1000, value[i+1]));
+            }
         });
         //sort the result by time
         result.sort(function (a, b) {
