@@ -110,12 +110,11 @@ SubtitleParser.prototype = {
             result = [];
         // Get offset from lyrics
         var offset = this.getOffset(text);
-
+        if(lines.length<=0) return result;
         //exclude the description parts or empty parts of the lyric
-        while (!pattern.test(lines[0])) {
+        while ( lines.length>0 && !pattern.test(lines[0])) {
             lines = lines.slice(1);
-        }
-        ;
+        };
         //remove the last empty item
         lines[lines.length - 1].length === 0 && lines.pop();
         //display all content on the page
