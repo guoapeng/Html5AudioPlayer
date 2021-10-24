@@ -14,6 +14,15 @@ SubtitleManager.prototype = {
         window.addEventListener("playAudio", function (e) {
             that.loadLyric(e.lyric);
         });
+
+        window.addEventListener('mb-progress-update', function(e){
+            that.synchronizeLyric(e.currentTime);
+        });
+
+        window.addEventListener('mb-play-error', function(e){
+            that.getSubtitleContainer().textContent = '!fail to load the audio :(';
+        });
+        
     },
     reset: function () {
         //reset the position of the lyric container
@@ -29,19 +38,8 @@ SubtitleManager.prototype = {
     setLyricText: function (lyric) {
         this.lyric = lyric
     },
-    createPlayerErrorHandler: function () {
-        var that = this;
-        return function (e) {
-            that.getSubtitleContainer().textContent = '!fail to load the song :(';
-        }
-    },
-    createPlayerTimeUpdateHandler: function () {
-        var that = this;
-        return function (e, currentTime) {
-            that.synchronizeLyric(e, currentTime);
-        }
-    },
-    synchronizeLyric: function (e, currentTime) {
+
+    synchronizeLyric: function (currentTime) {
         if (!this.getLyricText()) return;
         for (var i = 0, l = this.getLyricText().length; i < l; i++) {
             var line = document.getElementById('line-' + i);

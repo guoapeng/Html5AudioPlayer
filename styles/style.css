@@ -46,17 +46,7 @@ a:hover {
     width: 99%;
     margin: 0 auto;
 }
-#player {
-    position: fixed;
-    bottom: 5px;
-    opacity: 0.2;
-    left: 0;
-    right: 0;
-    z-index: 99;
-}
-#player:hover {
-    opacity: 1;
-}
+
 #playlist {
     text-align: left;
     max-width: 300px;
@@ -118,12 +108,6 @@ a:hover {
 }
 .current-song, .current-song a {
     color: #A6E22D;
-}
-/*hide the default audio controls when overflow, the 526px is the width of the controls in IE*/
-@media screen and (max-width: 526px) {
-    #player {
-        display: none;
-   }
 }
 
 /*custom scrollbar for webkit browsers*/

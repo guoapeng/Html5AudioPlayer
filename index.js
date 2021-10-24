@@ -13,20 +13,21 @@
  * refer to the branch refactore on https://github.com/guoapeng/Html5AudioPlayer.git for details
  */
 window.onload = function() {
-    var audioPlayer = new AudioPlayer(document.getElementById("audio"))
+    var audio = document.createElement("audio");
+    var audioPlayer = new AudioPlayer(audio);
     var subtitleManager = new SubtitleManager(document.getElementById("lyricContainer"));
     var playlist = new PlayList(document.getElementById("playlist"));
-    var audioControl = new AudioControl(document.getElementById("audio"))
+    var audioControl = new AudioControl(audio)
     subtitleManager.init();
     audioPlayer.init();
     playlist.init();
     audioControl.init();
-    audioPlayer.onTimeUpdate = subtitleManager.createPlayerTimeUpdateHandler()
-    audioPlayer.onPlayerError = subtitleManager.createPlayerErrorHandler()
     playlist.playStrategy = 2
     playlist.createTitle = function(audioDetail){
         return audioDetail.song_name + '-' + audioDetail.artist;
     };
+    new ProgressBar('#music-progress', 0, true); // 未播放时锁定不让拖动
+    new VolumeBar('#volume-progress', false);
     //playlist.loadAudioList('http://localhost:9993/content/index_for_local_test.json');
     playlist.loadAudioList('https://guoapeng.github.io/lyrics/content/index.json');
 }
