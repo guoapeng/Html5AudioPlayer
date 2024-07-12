@@ -29,7 +29,7 @@ window.onload = function() {
     new ProgressBar('#music-progress', 0, true); // 未播放时锁定不让拖动
     new VolumeBar('#volume-progress', false);
     //playlist.loadAudioList('http://localhost:9993/content/index_for_local_test.json');
-    playlist.loadAudioList('https://www.pengtech.net/lyrics/content/index.json');
+    playlist.loadAudioList('https://pengtech.net/lyrics/content/index.json');
 }
 
 function changeBg(bgStyle) {
